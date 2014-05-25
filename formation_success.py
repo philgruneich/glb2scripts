@@ -13,9 +13,9 @@ import re
 # Customize this!
 
 define_success = {
-	'QB Rush': 4,
+	'QB Rush': 5,
 	'Outside Run': 3,
-	'Inside Run': 1,
+	'Inside Run': 3,
 	'Pass': 0
 }
 
@@ -90,79 +90,89 @@ def perc(kind, total):
 	else:
 		return '{0}%'.format(int((kind * 100) / total))
 		
-def play_time(pbp):
+def play_time(game_id):
 	stats = {}
-	for play_range in range(len(pbp) - 1):
-		play = pbp[play_range]
+	team_of_interest = input('''Insert your Team ID: ''')
+	for game in game_id:
 		try:
-			offense_play = offensive_playbook[play['offense_play']]
-			offense_name = offense_play['name']
-			offense_formation = offense_play['formation']
-			offense_cat = play_formatting[offense_play['cat']]
-			defense_play = defensive_playbook[play['defense_play']]
-			defense_name = defense_play['name']
-			defense_cat = formation_formatting[defense_play['cat']]
+			p_b_p = requests.get('http://glb2.warriorgeneral.com/game/game/{0}/json?type=pbp'.format(game)).content
+			play_by_play = json.loads(p_b_p.decode('utf-8'))
+			pbp = [play for play in play_by_play.values() if play["offense"] != team_of_interest and play["down"] in ['1', '2', '3']]
 		except:
 			continue
-		play_description = play['description']
-		if offense_cat == 'Pass':
-			if 'sacked QB' in play_description:
-				success = 1
-			else:
-				pass_compile = re.match('(?!.*intercepted).*pass.*for a (\d+) yard (gain|loss)', play_description)
-				if pass_compile:
-					yardage = int(pass_compile.group(1))
-					if pass_compile.group(2) == 'loss':
-						success = 1
+		for play_range in range(len(pbp) - 1):
+			play = pbp[play_range]
+			try:
+				offense_play = offensive_playbook[play['offense_play']]
+				offense_name = offense_play['name']
+				offense_formation = offense_play['formation']
+				offense_cat = play_formatting[offense_play['cat']]
+				defense_play = defensive_playbook[play['defense_play']]
+				defense_name = defense_play['name']
+				defense_cat = formation_formatting[defense_play['cat']]
+			except:
+				continue
+			play_description = play['description']
+			if offense_cat == 'Pass':
+				if 'sacked QB' in play_description:
+					success = 1
+				else:
+					pass_compile = re.match('(?!.*intercepted).*pass.*for a (\d+) yard (gain|loss)', play_description)
+					if pass_compile:
+						yardage = int(pass_compile.group(1))
+						if pass_compile.group(2) == 'loss':
+							success = 1
+						else:
+							success = 0
+					elif 'scrambled' in play_description:
+						scramble_compile = re.match('QB {\d+} scrambled for a (\d+) yard (gain|loss).*', play_description)
+						yardage = int(scramble_compile.group(1))
+						if scramble_compile.group(2) == 'loss':
+							yardage = yardage * -1
+						if yardage > define_success['Outside Run']:
+							success = 0
+						else:
+							success = 1
 					else:
-						success = 0
-				elif 'scrambled' in play_description:
-					scramble_compile = re.match('QB {\d+} scrambled for a (\d+) yard (gain|loss).*', play_description)
-					yardage = int(scramble_compile.group(1))
-					if scramble_compile.group(2) == 'loss':
+						success = 1
+			elif offense_cat in ['Inside Run', 'Outside Run']:
+				run_compile = re.match('.*for a (\d+) yard (gain|loss)', play_description)
+				if run_compile:
+					yardage = int(run_compile.group(1))
+					if run_compile.group(2) == 'loss':
 						yardage = yardage * -1
-					if yardage > define_success['Outside Run']:
+					if yardage > define_success[offense_cat]:
 						success = 0
 					else:
 						success = 1
-		elif offense_cat in ['Inside Run', 'Outside Run']:
-			run_compile = re.match('.*for a (\d+) yard (gain|loss)', play_description)
-			if run_compile:
-				yardage = int(run_compile.group(1))
-				if run_compile.group(2) == 'loss':
-					yardage = yardage * -1
-				if yardage > define_success[offense_cat]:
-					success = 0
-				else:
-					success = 1
-		else:
-			gl_compile = re.match('.*(pitched|rushed|handed off).*for a (\d+) yard (gain|loss).*', play_description)
-			if gl_compile:
-				yardage = int(gl_compile.group(2))
-				if gl_compile.group(3) == 'loss':
-					yardage = yardage * -1
-				if gl_compile.group(1) == 'pitched':
-					gl_offense = 'Outside Run'
-				elif gl_compile.group(1) == 'handed off':
-					gl_offense = 'Inside Run'
-				else:
-					gl_offense = 'QB Rush'
-				if yardage > define_success[gl_offense]:
-					success = 0
-				else:
-					success = 1
-		formation = '{0} % {1}'.format(defense_name, defense_cat)
-		if offense_cat in stats:
-			if offense_name in stats[offense_cat]:
-				if formation in stats[offense_cat][offense_name]:
-					stats[offense_cat][offense_name][formation][0]+=success
-					stats[offense_cat][offense_name][formation][1]+=1
-				else:
-					stats[offense_cat][offense_name][formation] = [success, 1]
 			else:
-				stats[offense_cat][offense_name] = {formation: [success, 1]}
-		else:
-			stats[offense_cat] = {offense_name: {formation: [success, 1]}}
+				gl_compile = re.match('.*(pitched|rushed|handed off).*for a (\d+) yard (gain|loss).*', play_description)
+				if gl_compile:
+					yardage = int(gl_compile.group(2))
+					if gl_compile.group(3) == 'loss':
+						yardage = yardage * -1
+					if gl_compile.group(1) == 'pitched':
+						gl_offense = 'Outside Run'
+					elif gl_compile.group(1) == 'handed off':
+						gl_offense = 'Inside Run'
+					else:
+						gl_offense = 'QB Rush'
+					if yardage > define_success[gl_offense]:
+						success = 0
+					else:
+						success = 1
+			formation = '{0} % {1}'.format(defense_name, defense_cat)
+			if offense_cat in stats:
+				if offense_name in stats[offense_cat]:
+					if formation in stats[offense_cat][offense_name]:
+						stats[offense_cat][offense_name][formation][0]+=success
+						stats[offense_cat][offense_name][formation][1]+=1
+					else:
+						stats[offense_cat][offense_name][formation] = [success, 1]
+				else:
+					stats[offense_cat][offense_name] = {formation: [success, 1]}
+			else:
+				stats[offense_cat] = {offense_name: {formation: [success, 1]}}
 	return stats
 # Prompts for the Game ID, throws an error if it is not numerical.
 
@@ -174,34 +184,18 @@ def the_printer(play_dict):
 			for defense_play in play_dict[offense_play][offense_formation].keys():
 				success = play_dict[offense_play][offense_formation][defense_play][0]
 				total = play_dict[offense_play][offense_formation][defense_play][1]
-				print('\t\t{0}: {1} ({2})'.format(defense_play, success, perc(success, total)))
+				print('\t\t{0}: {1}/{2} ({3})'.format(defense_play, success, total, perc(success, total)))
 		print()
 
 game_id = input('Insert the Game ID here: ')
-if not game_id.isdigit():
-	raise Exception('A Game ID is only numbers. For example, the Game ID for http://glb2.warriorgeneral.com/game/game/54548 is only 54548')
+game_id = game_id.split(',')#if not game_id.isdigit():
+#	raise Exception('A Game ID is only numbers. For example, the Game ID for http://glb2.warriorgeneral.com/game/game/54548 is only 54548')
 
 # Collects the play-by-play information
-pbp = requests.get('http://glb2.warriorgeneral.com/game/game/{0}/json?type=pbp'.format(game_id)).content
-play_by_play = json.loads(pbp.decode('utf-8'))
 
 # The Team of Interest section: where you pick the team you want to scout (after all, who tracks two teams before a match?)
-
-team_ids = list(set((play["offense"] for play in play_by_play.values())))
-team_of_interest = input('''Here are the Team IDs available: {0} and {1}
-Insert the ID from the team you\'d like to scout: '''.format(team_ids[0], team_ids[1]))
-if not team_of_interest in team_ids:
-	raise Exception('You must pick ONE of the Team IDs.')
 	
-the_play_list = [play for play in play_by_play.values() if play["offense"] == team_of_interest and play["down"] in ['1', '2', '3']]
-
-#for play in play_by_play.values():
-#	try:
-#		is_offense = offensive_playbook[play['offense_play']]
-#	except:
-#		continue
-#	if play_formatting[is_offense['cat']] == 'Pass':
-#		print(play['description'])
+#the_play_list = [play for play in play_by_play.values() if play["offense"] != team_of_interest and play["down"] in ['1', '2', '3']]
 		
-the_printer(play_time(the_play_list))
+the_printer(play_time(game_id))
 
