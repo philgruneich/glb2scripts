@@ -1,29 +1,46 @@
-# Before we move on, you should install 1 new: keyring. Just do as when you installed requests and BeautifulSoup4
-# This script doesn't display the team names anymore. Neither displays the information for both teams. I believe it makes the whole thing more focused.
-# You'll be prompted for your username and password, they'll be stored in your machine (that's what the keyring module does). I need to create a GLB2 session so we can download the JSON with the entire offensive playbook, which we use to find out the kinds of plays and the nº of receivers. Let me know if you run into troubles with this module since I never used it previously.
-# Instead of editing the code, now you'll be prompted to insert the Game ID and the Team ID of the team you want to scout afterwards.
-# If you're feeling adventurous, you can look for a dictionary called yards. There you can customize what the script will consider as Very Short, Short, Medium and Long, just as in the Tactics section of GLB2
-# Let's talk about improvements: This script is at least 8 times faster than the previous version. It displays only the valid information, so no more 0 (0%). It sorts all results in an order I consider pleasant to the eye. It shows percentages for the receivers considering the down, which may be great for you to decide your blitzes.
+# Before we move on, you should install 1 new: keyring.
+# Just do as when you installed requests and BeautifulSoup4
+# This script doesn't display the team names anymore.
+# Neither displays the information for both teams.
+# I believe it makes the whole thing more focused.
+# You'll be prompted for your username and password,
+# they'll be stored in your machine (that's what the keyring module does).
+# I need to create a GLB2 session so we can download the
+# JSON with the entire offensive playbook,
+# which we use to find out the kinds of plays and the nº of receivers.
+# Let me know if you run into troubles with this module since
+# I never used it previously.
+# Instead of editing the code,
+# now you'll be prompted to insert the Game ID and the Team ID of the team
+# you want to scout afterwards.
+# If you're feeling adventurous, you can look for a dictionary called yards.
+# There you can customize what the script will consider as Very Short, Short,
+# Medium and Long, just as in the Tactics section of GLB2
+# Let's talk about improvements:
+# This script is at least 8 times faster than the previous version.
+# It displays only the valid information, so no more 0 (0%).
+# It sorts all results in an order I consider pleasant to the eye.
+# It shows percentages for the receivers considering the down,
+# which may be great for you to decide your blitzes.
 # Hope you enjoy, now let me sleep.
 
 import getpass
-import keyring # pip3 install keyring
+import keyring  # pip3 install keyring
 import re
+import requests  # pip3 install requests
+import json
+from bs4 import BeautifulSoup as bs
 
 # Customize this!
 
 define_success = {
-    'QB Rush': 5,
-    'Outside Run': 3,
-    'Inside Run': 3,
+    'QB Rush': 3,
+    'Outside Run': 2,
+    'Inside Run': 2,
     'Pass': 0
 }
 
-# Choose a season
-
-season = 31
-
-#Checking/Prompting for username/password
+# Checking/Prompting for username/password
 
 user_name = keyring.get_password('glb2', 'user_name')
 password = keyring.get_password('glb2', 'password')
@@ -34,33 +51,24 @@ if password is None:
     password = getpass.getpass('Your GLB2 Password: ')
     keyring.set_password('glb2', 'password', password)
 
-login = {'action': 'login','user_name': user_name,'password': password}
+login = {'action': 'login', 'user_name': user_name, 'password': password}
 
 # Grabs the whole defensive playbook:
-
-import requests # pip3 install requests
-import json
-
 team_of_interest = input('''Insert your Team ID: ''')
 
 with requests.Session() as c:
     c.post('http://glb2.warriorgeneral.com/game/login', data=login)
     r = c.get('http://glb2.warriorgeneral.com/game/playbook/O/ajax').content
     w = c.get('http://glb2.warriorgeneral.com/game/playbook/D/ajax').content
-    y = c.get('http://glb2.warriorgeneral.com/game/team/{}/games/'.format(team_of_interest), params={'type':'json', 'season':season}).content
+    y = c.get('http://glb2.warriorgeneral.com/game/team/{}/games/'.format(team_of_interest), params={'type': 'json', 'season': '30'}).content
 
 offensive_playbook = json.loads(r.decode('utf-8'))
 defensive_playbook = json.loads(w.decode('utf-8'))
 
-print('loaded playbooks')
-
-from bs4 import BeautifulSoup as bs
-
-soup = bs(y, "lxml")
+soup = bs(y, 'lxml')
 
 completed_games = [link.get('href')[11:] for link in soup.select('td.list_score a') if re.match('/game/game/\d+',link.get('href'))]
 
-# print(completed_games)
 play_formatting = {
     'run_outside_qb': 'Outside QB',
     'run_outside_fb': 'Outside Run',
@@ -100,7 +108,6 @@ formation_formatting = {
     'zone_5-2': '5-2 [Z]'
 }
 
-
 def perc(kind, total):
     if total == 0 or kind == 0:
         return '0'
@@ -115,15 +122,12 @@ def play_time(game_id):
         print(game)
         try:
             p_b_p = requests.get('http://glb2.warriorgeneral.com/game/game/{0}/json?type=pbp'.format(game)).content
-            # print(p_b_p)
             play_by_play = json.loads(p_b_p.decode('utf-8'))
-            pbp = [play for play in play_by_play.values() if play["offense"] != team_of_interest and play["down"] in ['1', '2', '3']]
+            pbp = [play for play in play_by_play.values() if play["offense"] == team_of_interest and play["down"] in ['1', '2', '3']]
         except:
-            # print('continuing')
             continue
         for play_range in range(len(pbp) - 1):
             play = pbp[play_range]
-            # print(play)
             try:
                 offense_play = offensive_playbook[play['offense_play']]
                 offense_name = offense_play['name']
@@ -147,9 +151,9 @@ def play_time(game_id):
                         else:
                             success = 0
                     elif 'scrambled' in play_description:
-                        scramble_compile = re.match('QB {\d+} scrambled for a (\d+) yard (gain|loss).*', play_description)
-                        yardage = int(scramble_compile.group(1))
-                        if scramble_compile.group(2) == 'loss':
+                        scramble_compile = re.match('QB {\d+} scrambled(, who went out of bounds)? for a (\d+) yard (gain|loss).*', play_description)
+                        yardage = int(scramble_compile.group(2))
+                        if scramble_compile.group(3) == 'loss':
                             yardage = yardage * -1
                         if yardage > define_success['Outside Run']:
                             success = 0
@@ -184,14 +188,14 @@ def play_time(game_id):
                     else:
                         success = 1
             formation = '{0} % {1}'.format(defense_name, defense_cat)
-            if offense_cat in stats:
-                if formation in stats[offense_cat]:
-                    stats[offense_cat][formation][0]+=success
-                    stats[offense_cat][formation][1]+=1
+            if formation in stats:
+                if offense_cat in stats[formation]:
+                    stats[formation][offense_cat][0]+=success
+                    stats[formation][offense_cat][1]+=1
                 else:
-                    stats[offense_cat][formation] = [success, 1]
+                    stats[formation][offense_cat] = [success, 1]
             else:
-                stats[offense_cat] = {formation: [success, 1]}
+                stats[formation] = {offense_cat: [success, 1]}
     return stats
 # Prompts for the Game ID, throws an error if it is not numerical.
 
@@ -204,8 +208,7 @@ def the_printer(play_dict):
             print('\t\t{0}: {1}/{2} ({3})'.format(defense_play, success, total, perc(success, total)))
         print()
 
-#game_id = input('Insert the Game ID here: ')
-#game_id = game_id.split(',')
-        
-the_printer(play_time(completed_games))
+# game_id = input('Insert the Game ID here: ')
+# game_id = game_id.split(',')
 
+the_printer(play_time(completed_games))

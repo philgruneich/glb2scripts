@@ -168,7 +168,8 @@ class glb2calc:
 #k3 = glb2calc('K', '64', 190, 'Easy Going', 'Sharp Shooter', 'Cool Headed', confidence=8, speed=1, stamina=1, agility=10, strength=8, awareness=7).build()
 #glb2calc.compare(k1, k2, k3)
 
-#qb1 = glb2calc('QB', '61', 212, 'Dual Threat', 'Cool Headed', 'Workhorse', agility=10, confidence=8, awareness=9, speed=1, strength=3, stamina=4).build()
+qb1 = glb2calc('QB', '61', 212, 'Dual Threat', 'Cool Headed', 'Workhorse', agility=10, confidence=8, awareness=9, speed=1, strength=3, stamina=4).pretty()
+
 #qb2 = glb2calc('QB', '61', 212, 'Dual Threat', 'Cool Headed', 'Workhorse', agility=10, confidence=9, awareness=9, speed=1, strength=1, stamina=5).build()
 #qb3 = glb2calc('QB', '61', 212, 'Dual Threat', 'Cool Headed', 'Workhorse', agility=10, confidence=8, awareness=9, speed=1, strength=2, stamina=5).build()
 #qb4 = glb2calc('QB', '61', 212, 'Dual Threat', 'Cool Headed', 'Workhorse', agility=10, confidence=9, awareness=8, speed=1, strength=2, stamina=5).build()
